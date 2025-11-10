@@ -13,9 +13,30 @@ PACMAN_DEPENDENCIES=(dkms libusb libdrm pkgconf gcc make)
 
 readonly PACMAN_DEPENDENCIES
 
-detect_kernel_package() {
+detect_kernel_package()
+{
   # Detect which kernel package is installed
-  if pacman -Qi linux-lts >/dev/null 2>&1; then
+  # Check CachyOS kernels first
+  if pacman -Qi linux-cachyos-lts >/dev/null 2>&1; then
+    echo "linux-cachyos-lts-headers"
+  elif pacman -Qi linux-cachyos >/dev/null 2>&1; then
+    echo "linux-cachyos-headers"
+  elif pacman -Qi linux-cachyos-bore >/dev/null 2>&1; then
+    echo "linux-cachyos-bore-headers"
+  elif pacman -Qi linux-cachyos-bmq >/dev/null 2>&1; then
+    echo "linux-cachyos-bmq-headers"
+  elif pacman -Qi linux-cachyos-pds >/dev/null 2>&1; then
+    echo "linux-cachyos-pds-headers"
+  elif pacman -Qi linux-cachyos-tt >/dev/null 2>&1; then
+    echo "linux-cachyos-tt-headers"
+  elif pacman -Qi linux-cachyos-eevdf >/dev/null 2>&1; then
+    echo "linux-cachyos-eevdf-headers"
+  elif pacman -Qi linux-cachyos-rt >/dev/null 2>&1; then
+    echo "linux-cachyos-rt-headers"
+  elif pacman -Qi linux-cachyos-rc >/dev/null 2>&1; then
+    echo "linux-cachyos-rc-headers"
+  # Standard Arch kernels
+  elif pacman -Qi linux-lts >/dev/null 2>&1; then
     echo "linux-lts-headers"
   elif pacman -Qi linux-zen >/dev/null 2>&1; then
     echo "linux-zen-headers"
@@ -26,7 +47,27 @@ detect_kernel_package() {
   else
     # Fallback: try to detect from uname
     local KVER=$(uname -r)
-    if [[ $KVER == *-lts* ]]; then
+    # CachyOS kernel detection from uname
+    if [[ $KVER == *-cachyos-lts* ]]; then
+      echo "linux-cachyos-lts-headers"
+    elif [[ $KVER == *-cachyos-bore* ]]; then
+      echo "linux-cachyos-bore-headers"
+    elif [[ $KVER == *-cachyos-bmq* ]]; then
+      echo "linux-cachyos-bmq-headers"
+    elif [[ $KVER == *-cachyos-pds* ]]; then
+      echo "linux-cachyos-pds-headers"
+    elif [[ $KVER == *-cachyos-tt* ]]; then
+      echo "linux-cachyos-tt-headers"
+    elif [[ $KVER == *-cachyos-eevdf* ]]; then
+      echo "linux-cachyos-eevdf-headers"
+    elif [[ $KVER == *-cachyos-rt* ]]; then
+      echo "linux-cachyos-rt-headers"
+    elif [[ $KVER == *-cachyos-rc* ]]; then
+      echo "linux-cachyos-rc-headers"
+    elif [[ $KVER == *-cachyos* ]]; then
+      echo "linux-cachyos-headers"
+    # Standard Arch kernels from uname
+    elif [[ $KVER == *-lts* ]]; then
       echo "linux-lts-headers"
     elif [[ $KVER == *-zen* ]]; then
       echo "linux-zen-headers"
@@ -38,35 +79,36 @@ detect_kernel_package() {
   fi
 }
 
-install_evdi() {
+install_evdi()
+{
   TARGZ="$1"
   ERRORS="$2"
   local EVDI_DRM_DEPS
   local EVDI
   EVDI=$(mktemp -d)
   if ! tar xf "$TARGZ" -C "$EVDI"; then
-    echo "Unable to extract $TARGZ to $EVDI" >"$ERRORS"
+    echo "Unable to extract $TARGZ to $EVDI" > "$ERRORS"
     return 1
   fi
 
   # Check if EVDI is already installed in DKMS
   local EVDI_VERSION
   EVDI_VERSION=$(awk -F '=' '/PACKAGE_VERSION/{print $2}' "${EVDI}/module/dkms.conf" 2>/dev/null | tr -d '"' | xargs)
-
+  
   if dkms status evdi 2>/dev/null | grep -q "evdi.*installed"; then
     echo "[[ EVDI DKMS module already installed - checking version ]]"
     local INSTALLED_VERSION
     INSTALLED_VERSION=$(dkms status evdi 2>/dev/null | grep installed | head -n1 | sed -n 's/.*evdi[,\/]\([^,]*\),.*/\1/p' | xargs)
     echo "Installed EVDI version: $INSTALLED_VERSION"
     echo "Package EVDI version: $EVDI_VERSION"
-
+    
     # Compare versions - if installed version is newer or equal, keep it
     if [ "$INSTALLED_VERSION" == "$EVDI_VERSION" ]; then
       echo "[[ EVDI version matches, skipping installation ]]"
       # Still need to configure module loading
-      printf '%s\n' 'evdi' >/etc/modules-load.d/evdi.conf
-      printf '%s\n' 'options evdi initial_device_count=4' >/etc/modprobe.d/evdi.conf
-
+      printf '%s\n' 'evdi' > /etc/modules-load.d/evdi.conf
+      printf '%s\n' 'options evdi initial_device_count=4' > /etc/modprobe.d/evdi.conf
+      
       # Backup module configuration
       local EVDI_SRC_VERSION
       EVDI_SRC_VERSION=$(ls -t /usr/src 2>/dev/null | grep evdi | head -n1)
@@ -74,7 +116,7 @@ install_evdi() {
         cp -rf /usr/src/$EVDI_SRC_VERSION $COREDIR/module 2>/dev/null || true
         cp /etc/modprobe.d/evdi.conf $COREDIR 2>/dev/null || true
       fi
-
+      
       rm -rf "$EVDI"
       return 0
     else
@@ -84,9 +126,9 @@ install_evdi() {
       if [[ ${CHOICE:-Y} =~ ^[Yy]$ ]]; then
         echo "[[ Keeping installed EVDI version ]]"
         # Configure module loading
-        printf '%s\n' 'evdi' >/etc/modules-load.d/evdi.conf
-        printf '%s\n' 'options evdi initial_device_count=4' >/etc/modprobe.d/evdi.conf
-
+        printf '%s\n' 'evdi' > /etc/modules-load.d/evdi.conf
+        printf '%s\n' 'options evdi initial_device_count=4' > /etc/modprobe.d/evdi.conf
+        
         # Backup module configuration
         local EVDI_SRC_VERSION
         EVDI_SRC_VERSION=$(ls -t /usr/src 2>/dev/null | grep evdi | head -n1)
@@ -94,7 +136,7 @@ install_evdi() {
           cp -rf /usr/src/$EVDI_SRC_VERSION $COREDIR/module 2>/dev/null || true
           cp /etc/modprobe.d/evdi.conf $COREDIR 2>/dev/null || true
         fi
-
+        
         rm -rf "$EVDI"
         return 0
       else
@@ -112,34 +154,35 @@ install_evdi() {
 
     if [ $retval == 3 ]; then
       echo "EVDI DKMS module already installed."
-    elif [ $retval != 0 ]; then
-      echo "Failed to install evdi to the kernel tree." >"$ERRORS"
-      echo "" >>"$ERRORS"
-      echo "Build log location: /var/lib/dkms/evdi/$EVDI_VERSION/build/make.log" >>"$ERRORS"
+    elif [ $retval != 0 ] ; then
+      echo "Failed to install evdi to the kernel tree." > "$ERRORS"
+      echo "" >> "$ERRORS"
+      echo "Build log location: /var/lib/dkms/evdi/$EVDI_VERSION/build/make.log" >> "$ERRORS"
       if [ -f "/var/lib/dkms/evdi/$EVDI_VERSION/build/make.log" ]; then
-        echo "Last 20 lines of build log:" >>"$ERRORS"
-        tail -n 20 "/var/lib/dkms/evdi/$EVDI_VERSION/build/make.log" >>"$ERRORS"
+        echo "Last 20 lines of build log:" >> "$ERRORS"
+        tail -n 20 "/var/lib/dkms/evdi/$EVDI_VERSION/build/make.log" >> "$ERRORS"
       fi
-      echo "" >>"$ERRORS"
-      echo "This usually means the EVDI version is incompatible with your kernel." >>"$ERRORS"
-      echo "You may need to:" >>"$ERRORS"
-      echo "1. Install a newer EVDI version from AUR: yay -S evdi" >>"$ERRORS"
-      echo "2. Or downgrade your kernel to a compatible version" >>"$ERRORS"
+      echo "" >> "$ERRORS"
+      echo "This usually means the EVDI version is incompatible with your kernel." >> "$ERRORS"
+      echo "You may need to:" >> "$ERRORS"
+      echo "1. Install a newer EVDI version from AUR: yay -S evdi" >> "$ERRORS"
+      echo "2. Or downgrade your kernel to a compatible version" >> "$ERRORS"
       make -sC "${EVDI}/module" uninstall_dkms 2>/dev/null
       return 1
     fi
   ) || return 1
-
+  
   echo "[[ Installing module configuration files ]]"
-  printf '%s\n' 'evdi' >/etc/modules-load.d/evdi.conf
+  printf '%s\n' 'evdi' > /etc/modules-load.d/evdi.conf
 
   printf '%s\n' 'options evdi initial_device_count=4' \
-    >/etc/modprobe.d/evdi.conf
+        > /etc/modprobe.d/evdi.conf
   EVDI_DRM_DEPS=$(sed -n -e '/^drm_kms_helper/p' /proc/modules | awk '{print $4}' | tr ',' ' ')
   EVDI_DRM_DEPS=${EVDI_DRM_DEPS/evdi/}
 
   [[ "${EVDI_DRM_DEPS}" ]] && printf 'softdep %s pre: %s\n' 'evdi' "${EVDI_DRM_DEPS}" \
-    >>/etc/modprobe.d/evdi.conf
+        >> /etc/modprobe.d/evdi.conf
+
 
   echo "[[ Backing up EVDI DKMS module ]]"
   local EVDI_SRC_VERSION
@@ -155,26 +198,27 @@ install_evdi() {
     cd "${EVDI}/library" || return 1
 
     if ! make; then
-      echo "Failed to build evdi library." >"$ERRORS"
+      echo "Failed to build evdi library." > "$ERRORS"
       return 1
     fi
 
     if ! cp -f libevdi.so "$COREDIR"; then
-      echo "Failed to copy evdi library to $COREDIR." >"$ERRORS"
+      echo "Failed to copy evdi library to $COREDIR." > "$ERRORS"
       return 1
     fi
 
     chmod 0755 "$COREDIR/libevdi.so"
-
-    ln -sf "$COREDIR/libevdi.so" /usr/lib/libevdi.so.0
-    ln -sf "$COREDIR/libevdi.so" /usr/lib/libevdi.so.1
+	
+    ln -sf "$COREDIR/libevdi.so"  /usr/lib/libevdi.so.0 
+    ln -sf "$COREDIR/libevdi.so"  /usr/lib/libevdi.so.1 
 
   ) || return 1
-
+  
   rm -rf "$EVDI"
 }
 
-uninstall_evdi_module() {
+uninstall_evdi_module()
+{
   TARGZ="$1"
 
   local EVDI
@@ -190,13 +234,15 @@ uninstall_evdi_module() {
   )
 }
 
-is_32_bit() {
+is_32_bit()
+{
   [ "$(getconf LONG_BIT)" == "32" ]
 }
 
-add_smi_script() {
+add_smi_script()
+{
   MODVER="$1"
-  cat >/usr/share/X11/xorg.conf.d/20-smi.conf <<'EOF'
+  cat > /usr/share/X11/xorg.conf.d/20-smi.conf <<'EOF'
 Section "Device"
         Identifier "SiliconMotion"
         Driver "modesetting"
@@ -204,17 +250,19 @@ Section "Device"
 EndSection
 EOF
 
-  chown root: /usr/share/X11/xorg.conf.d/20-smi.conf
-  chmod 644 /usr/share/X11/xorg.conf.d/20-smi.conf
+chown root: /usr/share/X11/xorg.conf.d/20-smi.conf
+chmod 644 /usr/share/X11/xorg.conf.d/20-smi.conf
 
 }
 
-remove_smi_script() {
+remove_smi_script()
+{
   rm -f /usr/share/X11/xorg.conf.d/20-smi.conf
 }
 
-add_systemd_service() {
-  cat >/usr/lib/systemd/system/smiusbdisplay.service <<'EOF'
+add_systemd_service()
+{
+  cat > /usr/lib/systemd/system/smiusbdisplay.service <<'EOF'
 [Unit]
 Description=SiliconMotion Driver Service
 After=display-manager.service
@@ -235,13 +283,15 @@ EOF
   chmod 0644 /usr/lib/systemd/system/smiusbdisplay.service
 }
 
-trigger_udev_if_devices_connected() {
+trigger_udev_if_devices_connected()
+{
   for device in $(grep -lw 090c /sys/bus/usb/devices/*/idVendor 2>/dev/null); do
     udevadm trigger --action=add "$(dirname "$device")"
   done
 }
 
-remove_systemd_service() {
+remove_systemd_service()
+{
   driver_name="smiusbdisplay"
   echo "Stopping ${driver_name} systemd service"
   systemctl stop ${driver_name}.service 2>/dev/null
@@ -249,8 +299,9 @@ remove_systemd_service() {
   rm -f /usr/lib/systemd/system/${driver_name}.service
 }
 
-add_pm_script() {
-  cat >$COREDIR/smipm.sh <<'EOF'
+add_pm_script()
+{
+  cat > $COREDIR/smipm.sh <<'EOF'
 #!/bin/bash
 
 suspend_usb()
@@ -277,11 +328,13 @@ EOF
   ln -sf $COREDIR/smipm.sh /usr/lib/systemd/system-sleep/smipm.sh
 }
 
-remove_pm_scripts() {
+remove_pm_scripts()
+{
   rm -f /usr/lib/systemd/system-sleep/smipm.sh
 }
 
-cleanup() {
+cleanup()
+{
   rm -rf $COREDIR
   rm -rf $LOGPATH
   rm -f /usr/bin/smi-installer
@@ -290,23 +343,25 @@ cleanup() {
   rm -rf /etc/modules-load.d/evdi.conf
 }
 
-binary_location() {
-  local PREFIX="x64"
-  local POSTFIX="ubuntu"
+binary_location()
+{
+    local PREFIX="x64"
+    local POSTFIX="ubuntu"
 
-  is_32_bit && PREFIX="x86"
-  echo "$PREFIX-$POSTFIX"
+    is_32_bit && PREFIX="x86"
+    echo "$PREFIX-$POSTFIX"
 }
 
-install() {
+install()
+{
   echo "Installing"
   mkdir -p $COREDIR
   chmod 0755 $COREDIR
-
+  
   cp -f "$SELF" "$COREDIR"
   ln -sf "$COREDIR/$(basename "$SELF")" /usr/bin/smi-installer
   chmod 0755 /usr/bin/smi-installer
-
+  
   echo "Installing EVDI"
   local ERRORS
   ERRORS=$(mktemp)
@@ -314,9 +369,9 @@ install() {
     rm -f "$ERRORS"
   }
   trap finish EXIT
-
+  
   if ! install_evdi "evdi.tar.gz" "$ERRORS"; then
-    echo "ERROR: $(<"$ERRORS")" >&2
+    echo "ERROR: $(< "$ERRORS")" >&2
     cleanup
     exit 1
   fi
@@ -326,11 +381,11 @@ install() {
   local SMI="$BINS/SMIUSBDisplayManager"
   local LIBUSB="$BINS/libusb-1.0.so.0.2.0"
   local GETFWLOG="$BINS/SMIFWLogCapture"
-
+  
   cp -f 'evdi.tar.gz' "$COREDIR"
   echo "Installing $SMI"
   cp -f $SMI $COREDIR
-
+  
   echo "Installing $GETFWLOG"
   cp -f $GETFWLOG $COREDIR
 
@@ -340,7 +395,7 @@ install() {
   [ -f $LIBUSB ] && cp -f $LIBUSB $COREDIR
   ln -sf $COREDIR/libusb-1.0.so.0.2.0 $COREDIR/libusb-1.0.so.0
   ln -sf $COREDIR/libusb-1.0.so.0.2.0 $COREDIR/libusb-1.0.so
-
+  
   echo "Installing firmware packages"
   local BOOTLOADER0="Bootloader0.bin"
   local BOOTLOADER1="Bootloader1.bin"
@@ -351,11 +406,11 @@ install() {
   [ -f $BOOTLOADER1 ] && cp -f $BOOTLOADER1 $COREDIR
   [ -f $FIRMWARE0BIN ] && cp -f $FIRMWARE0BIN $COREDIR
   [ -f $FIRMWARE1BIN ] && cp -f $FIRMWARE1BIN $COREDIR
-
+  
   chmod 0755 $COREDIR/SMIUSBDisplayManager
   chmod 0755 $COREDIR/libusb*.so*
   chmod 0755 $COREDIR/SMIFWLogCapture
-
+  
   ln -sf $COREDIR/SMIFWLogCapture /usr/bin/SMIFWLogCapture
   chmod 0755 /usr/bin/SMIFWLogCapture
 
@@ -384,7 +439,8 @@ install() {
   reboot
 }
 
-uninstall() {
+uninstall()
+{
   echo "Uninstalling"
 
   echo "Stopping SMIUSBDisplay systemd service"
@@ -406,11 +462,11 @@ uninstall() {
 
   if [ -d $OTHERPDDIR ]; then
     echo "WARNING: There are other products in the system using EVDI."
-  else
+  else 
     echo "Removing EVDI from kernel tree, DKMS, and removing sources."
     (
-      cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" &&
-        uninstall_evdi_module "evdi.tar.gz"
+      cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && \
+      uninstall_evdi_module "evdi.tar.gz"
     )
   fi
 
@@ -421,13 +477,15 @@ uninstall() {
   fi
 }
 
-missing_requirement() {
+missing_requirement()
+{
   echo "Unsatisfied dependencies. Missing component: $1." >&2
   echo "This is a fatal error, cannot install $PRODUCT." >&2
   exit 1
 }
 
-version_lt() {
+version_lt()
+{
   local left
   left=$(echo "$1" | cut -d. -f-2)
   local right
@@ -439,38 +497,43 @@ version_lt() {
   [ "$greater" != "$left" ]
 }
 
-program_exists() {
+program_exists()
+{
   command -v "${1:?}" >/dev/null 2>&1
 }
 
-check_installed_pacman() {
+check_installed_pacman()
+{
   pacman -Qi "${1:?}" >/dev/null 2>&1
 }
 
-install_dependencies() {
+install_dependencies()
+{
   program_exists pacman || return 0
   install_dependencies_pacman
 }
 
-pacman_ask_for_dependencies() {
+pacman_ask_for_dependencies()
+{
   local packages=("$@")
   echo "The following packages will be installed:"
   printf '  %s\n' "${packages[@]}"
   echo ""
 }
 
-install_dependencies_pacman() {
+install_dependencies_pacman()
+{
   echo "[ Dependency check ]"
   local packages=()
-
+  
   for item in "${PACMAN_DEPENDENCIES[@]}"; do
     check_installed_pacman "$item" || packages+=("$item")
   done
-
+  
   # Detect and check for appropriate kernel headers
   local KERNEL_HEADERS=$(detect_kernel_package)
   echo "Detected kernel headers package: $KERNEL_HEADERS"
-
+  
   if ! pacman -Qi "$KERNEL_HEADERS" >/dev/null 2>&1; then
     packages+=("$KERNEL_HEADERS")
   fi
@@ -478,7 +541,7 @@ install_dependencies_pacman() {
   if [[ ${#packages[@]} -gt 0 ]]; then
     echo "[ Installing dependencies ]"
     pacman_ask_for_dependencies "${packages[@]}"
-
+    
     read -rp 'Do you want to continue? [Y/n] ' CHOICE
     [[ "${CHOICE:-Y}" == "${CHOICE#[Yy]}" ]] && exit 0
 
@@ -486,7 +549,8 @@ install_dependencies_pacman() {
   fi
 }
 
-check_requirements() {
+check_requirements()
+{
   # DKMS
   program_exists dkms || missing_requirement "DKMS"
 
@@ -508,7 +572,8 @@ check_requirements() {
   fi
 }
 
-usage() {
+usage()
+{
   echo
   echo "Installs $PRODUCT, version $VERSION."
   echo "Usage: $SELF [ install | uninstall ]"
@@ -518,7 +583,8 @@ usage() {
   exit 1
 }
 
-detect_init_daemon() {
+detect_init_daemon()
+{
   INIT=$(readlink /proc/1/exe)
   if [ "$INIT" == "/sbin/init" ]; then
     INIT=$(/sbin/init --version 2>/dev/null)
@@ -534,8 +600,11 @@ detect_init_daemon() {
   fi
 }
 
-detect_distro() {
-  if [ -f /etc/arch-release ]; then
+detect_distro()
+{
+  if [ -f /etc/cachyos-release ]; then
+    echo "Distribution discovered: CachyOS"
+  elif [ -f /etc/arch-release ]; then
     echo "Distribution discovered: Arch Linux"
   elif program_exists lsb_release; then
     echo -n "Distribution discovered: "
@@ -545,17 +614,19 @@ detect_distro() {
   fi
 }
 
-xorg_running() {
+xorg_running()
+{
   local SESSION_NO
   SESSION_NO=$(loginctl 2>/dev/null | awk "/$(logname 2>/dev/null || echo root)/ {print \$1; exit}")
   [[ $(loginctl show-session "$SESSION_NO" -p Type 2>/dev/null) == *=x11 ]]
 }
 
-check_preconditions() {
+check_preconditions()
+{
   # Check if evdi module is already loaded
   if lsmod | grep -q "^evdi"; then
     echo "INFO: EVDI kernel module is already loaded." >&2
-
+	
     if [ -d $COREDIR ]; then
       echo "WARNING: $PRODUCT appears to be already installed." >&2
       read -rp 'Do you want to reinstall? This will uninstall the current version first. (Y/n) ' CHOICE
@@ -590,15 +661,15 @@ detect_distro
 
 while [ -n "$1" ]; do
   case "$1" in
-  install)
-    ACTION="install"
-    ;;
-  uninstall)
-    ACTION="uninstall"
-    ;;
-  *)
-    usage
-    ;;
+    install)
+      ACTION="install"
+      ;;
+    uninstall)
+      ACTION="uninstall"
+      ;;
+    *)
+      usage
+      ;;
   esac
   shift
 done
